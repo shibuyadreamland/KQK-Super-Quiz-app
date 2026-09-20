@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ApexQuiz Online - 完全版</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --primary: #3b82f6;
+            --accent: #ef4444;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1;
+        }
+        header { text-align: center; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        header h1 { margin: 0; font-size: 1.3rem; color: #60a5fa; }
+        .setup-box, .room-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, select {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: white;
+            font-size: 1rem;
+        }
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .btn:active { transform: scale(0.98); }
+        .score-board {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .score-board h4 { margin: 0 0 5px 0; color: #38bdf8; }
+        .quiz-section {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .question-text { font-size: 1.1rem; line-height: 1.5; margin: 10px 0; }
+        .status-alert { text-align: center; font-weight: bold; font-size: 1.1rem; color: #fbbf24; min-height: 30px; }
+        .online-buzzer {
+            width: 100%;
+            padding: 40px 20px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 6px 15px rgba(239, 68, 68, 0.4);
+            text-align: center;
+        }
+        .online-buzzer:disabled {
+            background: #475569;
+            color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+        .hidden { display: none !important; }
+        .log-area { font-size: 0.8rem; color: var(--text-sub); max-height: 60px; overflow-y: auto; background: #111827; padding: 6px; border-radius: 4px; }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>ApexQuiz - Complete</h1>
+    </header>
+
+    <!-- ロビー画面 -->
+    <div id="lobby-screen" class="setup-box">
+        <h3>参加設定</h3>
+        <input type="text" id="player-name" placeholder="あなたの名前（例: クイズ王A）" maxlength="10">
+        <button class="btn" style="background:#10b981;" onclick="startHost()">ルームを作成する（出題者）</button>
+        <hr style="border-color:#334155; width:100%;">
+        <input type="text" id="host-id-input" placeholder="出題者のルームIDを入力">
+        <button class="btn" onclick="joinHost()">ルームに参加する（回答者）</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="game-screen" class="hidden" style="display:flex; flex-direction:column; gap:10px; flex:1;">
+        <div class="room-box" style="padding:8px; font-size:0.85rem; display:flex; justify-content:space-between;">
+            <span id="my-role-label">役割: ---</span>
+            <span id="connection-status" style="color:#f59e0b;">接続中...</span>
+        </div>
+
+        <!-- スコア表示エリア -->
+        <div class="score-board">
+            <h4>🏆 リアルタイムスコアボード</h4>
+            <div id="score-list">スコア集計中...</div>
+        </div>
+
+        <div class="quiz-section">
+            <div>
+                <div id="q-meta" style="font-size:0.8rem; color:var(--text-sub);">スタンバイ</div>
+                <div class="question-text" id="q-text">問題の生成を待っています...</div>
+            </div>
+            <div class="status-alert" id="status-alert"></div>
+        </div>
+
+        <!-- 出題者用コントロール（AI自動生成ボタン付き） -->
+        <div id="host-controls" class="hidden" style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn" style="background:#8b5cf6;" onclick="generateAIQuestion()">🤖 AIに難問を自動生成させる</button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn" style="flex:1;" onclick="hostNextQuestion()">出題する</button>
+                <button class="btn" style="flex:1; background:#ef4444;" onclick="hostResetBuzzer()">早押しリセット</button>
+            </div>
+            <div id="answer-guide" style="font-size:0.85rem; color:#38bdf8;"></div>
+        </div>
+
+        <!-- 回答者用：早押しボタン -->
+        <div id="player-controls" class="hidden" style="text-align:center;">
+            <button class="online-buzzer" id="buzzer-btn" onclick="pressBuzzer()" disabled>押す！</button>
+        </div>
+
+        <div class="log-area" id="log-area">
+            [ログ] アプリ起動完了<br>
+        </div>
+    </div>
+</div>
+
+<script>
+    let peer = null;
+    let conn = null;
+    let connections = {};
+    let isHost = false;
+    let myName = "";
+    let myScore = 0;
+    let buzzerActive = false;
+    let currentResponderId = null;
+    let currentResponderName = "";
+
+    const aiQuestionPool = [
+        { meta: "AI自動生成 【歴史・科学】", text: "1911年にノルウェーの探検家アムンゼンが人類史上初めて到達した、地球の最南端にある地点は何でしょう？", answer: "南極点" },
+        { meta: "AI自動生成 【文学・芸術】", text: "19世紀のフランスの画家モネの代表作で、自身の庭の池に架かる橋やスイレンを描いた連作の名称は何でしょう？", answer: "睡蓮" },
+        { meta: "AI自動生成 【地理・地学】", text: "世界で最も深い海溝であり、太平洋の西マリアナ諸島東方にある水深約10,911mの海溝は何でしょう？", answer: "マリアナ海溝" },
+        { meta: "AI自動生成 【音楽・文化】", text: "18世紀に活躍した音楽の父と呼ばれるバッハと並び、音楽の母とも称される『メサイア』を作曲したドイツ出身の作曲家は誰でしょう？", answer: "ヘンデル" },
+        { meta: "AI自動生成 【テクノロジー】", text: "1969年にアメリカの国防総省高等研究計画局（DARPA）が開発した、インターネットの原型となったネットワークシステムは何でしょう？", answer: "ARPANET（アーパネット）" }
+    ];
+    let currentQ = { meta: "スタンバイ", text: "「AIに難問を自動生成させる」を押してください。", answer: "---" };
+
+    function log(msg) {
+        const area = document.getElementById('log-area');
+        area.innerHTML += msg + "<br>";
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function startHost() {
+        myName = document.getElementById('player-name').value || "出題者";
+        isHost = true;
+        
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('host-controls').classList.remove('hidden');
+        document.getElementById('my-role-label').innerText = `役割: 出題者 (${myName})`;
+
+        const roomId = 'quiz_' + Math.random().toString(36).substring(2, 8);
+        peer = new Peer(roomId);
+
+        peer.on('open', (id) => {
+            document.getElementById('connection-status').innerText = `ルームID: ${id} (メンバーに共有)`;
+            log(`ルーム作成成功 ID: ${id}`);
+        });
+
+        peer.on('connection', (c) => {
+            c.on('data', (data) => handleHostReceiveData(c, data));
+        });
+
+        updateScoreBoard();
+    }
+
+    function joinHost() {
+        myName = document.getElementById('player-name').value || "参加者";
+        const hostId = document.getElementById('host-id-input').value.trim();
+        if(!hostId) { alert("ルームIDを入力してください"); return; }
+
+        isHost = false;
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('player-controls').classList.remove('hidden');
+        document.getElementById('my-role-label').innerText = `役割: 参加者 (${myName})`;
+
+        peer = new Peer();
+
+        peer.on('open', () => {
+            conn = peer.connect(hostId);
+
+            conn.on('open', () => {
+                document.getElementById('connection-status').innerText = "接続完了";
+                document.getElementById('connection-status').style.color = "#10b981";
+                conn.send({ type: 'JOIN', name: myName });
+            });
+
+            conn.on('data', (data) => handlePlayerReceiveData(data));
+        });
+    }
+
+    function handleHostReceiveData(c, data) {
+        if(data.type === 'JOIN') {
+            connections[c.peer] = { conn: c, name: data.name, score: 0 };
+            log(`${data.name} さんが参加しました！`);
+            broadcastScores();
+        } else if(data.type === 'BUZZER') {
+            if(!buzzerActive) return;
+            buzzerActive = false;
+            currentResponderId = c.peer;
+            currentResponderName = data.name;
+
+            log(`★ ${data.name} さんが早押し成功！`);
+            document.getElementById('status-alert').innerText = `${data.name} さんが回答権獲得！`;
+            
+            showHostJudgeUI(data.name, c.peer);
+            broadcast({ type: 'BUZZER_SUCCESS', name: data.name });
+        }
+    }
+
+    function broadcast(data) {
+        for(let peerId in connections) {
+            connections[peerId].conn.send(data);
+        }
+    }
+
+    function broadcastScores() {
+        let scores = { [myName]: myScore };
+        for(let id in connections) {
+            scores[connections[id].name] = connections[id].score;
+        }
+        updateScoreBoardUI(scores);
+        broadcast({ type: 'UPDATE_SCORES', scores: scores });
+    }
+
+    function generateAIQuestion() {
+        const randomIndex = Math.floor(Math.random() * aiQuestionPool.length);
+        currentQ = aiQuestionPool[randomIndex];
+        document.getElementById('q-meta').innerText = currentQ.meta;
+        document.getElementById('q-text').innerText = "【新問生成完了】 「出題する」ボタンを押してください。";
+        document.getElementById('answer-guide').innerText = `[正解: ${currentQ.answer}]`;
+        log("AIが新しい難問を自動生成しました。");
+    }
+
+    function hostNextQuestion() {
+        if(!currentQ.text.includes("AI")) {
+            generateAIQuestion();
+        }
+        document.getElementById('q-text').innerText = currentQ.text;
+        document.getElementById('status-alert').innerText = "【 早押し受付中！】";
+        buzzerActive = true;
+        currentResponderId = null;
+
+        broadcast({ type: 'NEXT_Q', meta: currentQ.meta, text: currentQ.text });
+    }
+
+    function hostResetBuzzer() {
+        buzzerActive = true;
+        document.getElementById('status-alert').innerText = "【 早押し再開！】";
+        removeHostJudgeUI();
+        broadcast({ type: 'RESET_BUZZER' });
+    }
+
+    function showHostJudgeUI(name, peerId) {
+        let guide = document.getElementById('answer-guide');
+        guide.innerHTML = `<b style="color:#fbbf24;">${name}さんの回答判定：</b>
+            <button class="btn" style="background:#22c55e; padding:5px 10px; margin-left:5px;" onclick="judgeResult(true, '${peerId}')">正解(+10)</button>
+            <button class="btn" style="background:#ef4444; padding:5px 10px; margin-left:5px;" onclick="judgeResult(false, '${peerId}')">不正解(-10)</button>
+            <br>正解: ${currentQ.answer}`;
+    }
+
+    function removeHostJudgeUI() {
+        document.getElementById('answer-guide').innerText = `[正解: ${currentQ.answer}]`;
+    }
+
+    function judgeResult(isCorrect, peerId) {
+        if(isCorrect) {
+            if(peerId === 'host') {
+                myScore += 10;
+            } else if(connections[peerId]) {
+                connections[peerId].score += 10;
+            }
+            alert(`「正解！」に設定しました。`);
+        } else {
+            if(peerId === 'host') {
+                myScore -= 10;
+            } else if(connections[peerId]) {
+                connections[peerId].score -= 10;
+            }
+            alert(`「不正解」に設定しました。`);
+        }
+        broadcastScores();
+        removeHostJudgeUI();
+        document.getElementById('status-alert').innerText = "判定終了。「早押しリセット」またはガチャ等へ";
+    }
+
+    function handlePlayerReceiveData(data) {
+        if(data.type === 'NEXT_Q') {
+            document.getElementById('q-meta').innerText = data.meta;
+            document.getElementById('q-text').innerText = data.text;
+            document.getElementById('status-alert').innerText = "【 早押し受付中！！！ 】";
+            document.getElementById('buzzer-btn').disabled = false;
+            document.getElementById('buzzer-btn').style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
+        } else if(data.type === 'BUZZER_SUCCESS') {
+            document.getElementById('status-alert').innerText = `${data.name} さんがボタンを押しました！`;
+            document.getElementById('buzzer-btn').disabled = true;
+            document.getElementById('buzzer-btn').style.background = "#475569";
+        } else if(data.type === 'RESET_BUZZER') {
+            document.getElementById('status-alert').innerText = "【 早押し再開！ 】";
+            document.getElementById('buzzer-btn').disabled = false;
+            document.getElementById('buzzer-btn').style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
+        } else if(data.type === 'UPDATE_SCORES') {
+            updateScoreBoardUI(data.scores);
+        }
+    }
+
+    function pressBuzzer() {
+        document.getElementById('buzzer-btn').disabled = true;
+        document.getElementById('status-alert').innerText = "ボタンを押しました！判定待ち...";
+        conn.send({ type: 'BUZZER', name: myName });
+    }
+
+    function updateScoreBoardUI(scores) {
+        let html = "";
+        const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        for(let [name, score] of sortedScores) {
+            html += `<div>👤 <b>${name}</b>: <span style="color:#38bdf8; font-size:1.1rem; font-weight:bold;">${score}</span> pt</div>`;
+        }
+        document.getElementById('score-list').innerHTML = html;
+    }
+
+    function updateScoreBoard() {
+        let scores = { [myName]: myScore };
+        for(let id in connections) {
+            scores[connections[id].name] = connections[id].score;
+        }
+        updateScoreBoardUI(scores);
+    }
+</script>
+
+</body>
+</html>
