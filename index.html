@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- ブラウザのキャッシュを完全に無効化するメタタグ -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>ApexQuiz Online - キャッシュ自動回避＆15秒制限版</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --primary: #3b82f6;
+            --accent: #ef4444;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1;
+        }
+        header { text-align: center; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        header h1 { margin: 0; font-size: 1.1rem; color: #60a5fa; }
+        .setup-box, .room-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, select {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: white;
+            font-size: 1rem;
+        }
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+        .score-board {
+            background: #0f172a;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .score-board h4 { margin: 0 0 5px 0; color: #38bdf8; }
+        .quiz-section {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .question-text { font-size: 1.05rem; line-height: 1.6; margin: 5px 0; }
+        .status-alert { text-align: center; font-weight: bold; font-size: 1.1rem; color: #fbbf24; min-height: 30px; margin-top: auto; }
+        
+        /* タイマーバーのスタイル */
+        .timer-box {
+            background: #111827;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            margin-top: 5px;
+        }
+        .timer-container {
+            width: 100%;
+            background: #334155;
+            border-radius: 6px;
+            height: 14px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .timer-bar {
+            width: 100%;
+            height: 100%;
+            background: #22c55e;
+            transition: width 0.05s linear;
+        }
+
+        .online-buzzer {
+            width: 100%;
+            padding: 40px 20px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 6px 15px rgba(239, 68, 68, 0.4);
+            text-align: center;
+        }
+        .online-buzzer:disabled {
+            background: #475569;
+            color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+        .hidden { display: none !important; }
+        .log-area { font-size: 0.75rem; color: var(--text-sub); max-height: 90px; overflow-y: auto; background: #111827; padding: 6px; border-radius: 4px; border: 1px solid #374151; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🏆 総合クイズマスター (キャッシュ自動回避版)</h1>
+    </header>
+
+    <!-- ロビー画面 -->
+    <div id="lobby-screen" class="setup-box">
+        <h3>参加設定</h3>
+        <input type="text" id="player-name" placeholder="あなたの名前（例: クイズ王A）" maxlength="10">
+        <label style="font-size:0.85rem; color:#94a3b8;">出題ジャンル選択（ホストのみ有効）:</label>
+        <select id="genre-select">
+            <option value="yoji_all">四字熟語（yoji_1000.json 全自動読込）</option>
+            <option value="math">論理数学パズル（法則・仕事算・鶴亀算等）</option>
+            <option value="geo">日本の都道府県・世界の首都</option>
+            <option value="mixed">全ジャンルミックス</option>
+        </select>
+        <button class="btn" style="background:#10b981;" id="start-host-btn" onclick="startHost()" disabled>データ読込中...</button>
+        <hr style="border-color:#334155; width:100%;">
+        <input type="text" id="host-id-input" placeholder="出題者のルームIDを入力（例: quiz_xxxxxx）">
+        <button class="btn" onclick="joinHost()">ルームに参加する（回答者）</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="game-screen" class="hidden" style="display:flex; flex-direction:column; gap:10px; flex:1;">
+        <div class="room-box" style="padding:8px; font-size:0.85rem; display:flex; justify-content:space-between;">
+            <span id="my-role-label">役割: ---</span>
+            <span id="connection-status" style="color:#f59e0b;">接続中...</span>
+        </div>
+
+        <div class="score-board">
+            <h4>🏆 リアルタイムスコアボード</h4>
+            <div id="score-list">スコア集計中...</div>
+        </div>
+
+        <div class="quiz-section">
+            <div>
+                <div id="q-meta" style="font-size:0.8rem; color:var(--text-sub);">スタンバイ</div>
+                <div class="question-text" id="q-text">「新問を作成」を押してください。</div>
+            </div>
+            
+            <!-- 15秒制限タイマーバー表示エリア -->
+            <div id="timer-ui" class="timer-box hidden">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#fbbf24; font-weight:bold;">
+                    <span>🚨 回答制限時間</span>
+                    <span id="timer-sec">15.0秒</span>
+                </div>
+                <div class="timer-container">
+                    <div class="timer-bar" id="timer-bar"></div>
+                </div>
+            </div>
+
+            <div class="status-alert" id="status-alert"></div>
+        </div>
+
+        <!-- 出題者用コントロール -->
+        <div id="host-controls" class="hidden" style="display:flex; flex-direction:column; gap:8px;">
+            <button class="btn" style="background:#8b5cf6;" onclick="generateQuestion()">🎲 論理パズル新問を作成</button>
+            <div style="display:flex; gap:8px;">
+                <button class="btn" style="flex:1;" id="broadcast-btn" onclick="hostNextQuestion()" disabled>出題する</button>
+                <button class="btn" style="flex:1; background:#ef4444;" onclick="hostResetBuzzer()">早押しリセット</button>
+            </div>
+            <div id="answer-guide" style="font-size:0.85rem; color:#38bdf8;"></div>
+        </div>
+
+        <!-- 回答者用：早押しボタン ＆ 解答入力欄 -->
+        <div id="player-controls" class="hidden" style="text-align:center;">
+            <button class="online-buzzer" id="buzzer-btn" onclick="pressBuzzer()" disabled>押す！</button>
+            <div id="answer-input-area" class="hidden" style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+                <input type="text" id="player-answer-text" placeholder="ここに答えを入力..." style="flex:1;">
+                <button class="btn" style="background:#10b981; padding:10px 15px;" onclick="sendAnswerText()">回答送信</button>
+            </div>
+        </div>
+
+        <div class="log-area" id="log-area">
+            [ログ] システム初期化完了<br>
+        </div>
+    </div>
+</div>
+
+<script>
+    let peer = null;
+    let conn = null;
+    let connections = {};
+    let isHost = false;
+    let myName = "";
+    let myScore = 0;
+    let buzzerActive = false;
+    let currentResponderId = null;
+    let currentResponderName = "";
+
+    let usedQuestions = [];
+    let currentQ = { meta: "スタンバイ", text: "「新問を作成」を押してください。", answer: "---" };
+    let externalYojiData = [];
+    let targetHostId = "";
+    let isReconnecting = false;
+
+    let answerTimer = null;
+    let timerInterval = null;
+    const ANSWER_TIME_LIMIT = 15000; // 15秒
+
+    const peerConfig = {
+        debug: 2,
+        config: {
+            'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.stunprotocol.org:3478' }
+            ]
+        }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+        // キャッシュを自動回避するためのタイムスタンプパラメータ (?t=...) を付与
+        fetch('yoji_1000.json?t=' + Date.now())
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                externalYojiData = data;
+                log(`[成功] yoji_1000.json 読込完了 (${externalYojiData.length}問)`);
+                enableHostButton();
+            })
+            .catch(err => {
+                log(`[注意] JSON読込失敗 (${err.message})。他モードで利用可能`);
+                enableHostButton();
+            });
+    });
+
+    function enableHostButton() {
+        const hostBtn = document.getElementById('start-host-btn');
+        hostBtn.disabled = false;
+        hostBtn.innerText = "ルームを作成する（出題者）";
+    }
+
+    function log(msg) {
+        const area = document.getElementById('log-area');
+        if(!area) return;
+        area.innerHTML += `> ${msg}<br>`;
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function startHost() {
+        myName = document.getElementById('player-name').value.trim() || "出題者";
+        isHost = true;
+        usedQuestions = []; 
+        
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('host-controls').classList.remove('hidden');
+        document.getElementById('my-role-label').innerText = `役割: 出題者 (${myName})`;
+
+        const roomId = 'quiz_' + Math.random().toString(36).substring(2, 8);
+        log(`Peerサーバーへ接続要求中... (ID: ${roomId})`);
+        
+        peer = new Peer(roomId, peerConfig);
+
+        peer.on('open', (id) => {
+            document.getElementById('connection-status').innerText = `ルームID: ${id}`;
+            log(`[ホスト成功] ルーム作成完了: ${id}`);
+        });
+
+        peer.on('connection', (c) => {
+            log(`[通知] 参加者からの接続リクエスト受信 (${c.peer})`);
+            
+            c.on('open', () => {
+                connections[c.peer] = { conn: c, name: "参加者", score: 0 };
+                log(`[接続確立] 参加者とチャンネルが開きました`);
+            });
+
+            c.on('data', (data) => handleHostReceiveData(c, data));
+            
+            c.on('close', () => {
+                delete connections[c.peer];
+                log(`[切断] 参加者が退出しました`);
+                broadcastScores();
+            });
+
+            c.on('error', (err) => {
+                log(`[通信エラー]: ${JSON.stringify(err)}`);
+            });
+        });
+
+        updateScoreBoard();
+    }
+
+    function joinHost() {
+        myName = document.getElementById('player-name').value.trim() || "参加者";
+        targetHostId = document.getElementById('host-id-input').value.trim();
+        if(!targetHostId) { alert("ルームIDを入力してください"); return; }
+
+        isHost = false;
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('player-controls').classList.remove('hidden');
+        document.getElementById('my-role-label').innerText = `役割: 参加者 (${myName})`;
+
+        initPlayerPeer();
+    }
+
+    function initPlayerPeer() {
+        log(`参加用Peer初期化中...`);
+        peer = new Peer(peerConfig);
+
+        peer.on('open', () => {
+            connectToHost();
+        });
+
+        peer.on('error', (err) => {
+            log(`[PeerJSエラー 参加者]: ${err.type} - ${err.message}`);
+            triggerAutoReconnect();
+        });
+    }
+
+    function connectToHost() {
+        if (!targetHostId) return;
+        log(`出題者 (${targetHostId}) へ接続試行中...`);
+        document.getElementById('connection-status').innerText = "再接続/接続中...";
+        document.getElementById('connection-status').style.color = "#f59e0b";
+
+        conn = peer.connect(targetHostId, {
+            reliable: true,
+            serialization: 'json'
+        });
+
+        const timeout = setTimeout(() => {
+            if (conn && !conn.open) {
+                log(`[警告] 接続タイムアウト。自動再試行します...`);
+                triggerAutoReconnect();
+            }
+        }, 8000);
+
+        conn.on('open', () => {
+            clearTimeout(timeout);
+            isReconnecting = false;
+            document.getElementById('connection-status').innerText = "接続完了！";
+            document.getElementById('connection-status').style.color = "#10b981";
+            log("出題者への接続に成功しました！");
+            conn.send({ type: 'JOIN', name: myName });
+        });
+
+        conn.on('data', (data) => handlePlayerReceiveData(data));
+
+        conn.on('close', () => {
+            document.getElementById('connection-status').innerText = "回線切断を検知";
+            document.getElementById('connection-status').style.color = "#ef4444";
+            log("ホストとの接続が切れました。自動再接続を試みます...");
+            triggerAutoReconnect();
+        });
+
+        conn.on('error', (err) => {
+            log(`[コネクションエラー]: ${JSON.stringify(err)}`);
+            triggerAutoReconnect();
+        });
+    }
+
+    function triggerAutoReconnect() {
+        if (isHost || isReconnecting) return;
+        isReconnecting = true;
+
+        log(`🔄 3秒後に自動再接続を行います...`);
+        setTimeout(() => {
+            if (peer) {
+                try { peer.destroy(); } catch(e) {}
+            }
+            initPlayerPeer();
+        }, 3000);
+    }
+
+    // ── 問題ジェネレーター ──
+    function generateQuestion() {
+        const mode = document.getElementById('genre-select').value;
+        let generators = [];
+
+        if(mode === 'yoji_all') {
+            if(externalYojiData.length === 0) {
+                alert("四字熟語データがまだ読み込まれていません。");
+                return;
+            }
+            generators = [genYojijukugoQuestion];
+        } else if(mode === 'math') {
+            generators = [genPatternPuzzle1, genPatternPuzzle2, genWorkProblem, genCraneTurtle, genAgeProblem];
+        } else if(mode === 'geo') {
+            generators = [genPrefectureQuestion, genCapitalQuestion];
+        } else {
+            generators = [];
+            if(externalYojiData.length > 0) generators.push(genYojijukugoQuestion);
+            generators.push(genPatternPuzzle1, genPatternPuzzle2, genWorkProblem, genCraneTurtle, genAgeProblem, genPrefectureQuestion, genCapitalQuestion);
+        }
+
+        let newQ = null;
+        let attempts = 0;
+        while(attempts < 100) {
+            const gen = generators[Math.floor(Math.random() * generators.length)];
+            let q = gen();
+            if(q && !usedQuestions.includes(q.text)) {
+                newQ = q;
+                break;
+            }
+            attempts++;
+        }
+
+        if(!newQ) {
+            usedQuestions = [];
+            const gen = generators[Math.floor(Math.random() * generators.length)];
+            newQ = gen();
+        }
+
+        if(newQ) {
+            usedQuestions.push(newQ.text);
+            currentQ = newQ;
+            document.getElementById('q-meta').innerText = currentQ.meta;
+            document.getElementById('q-text').innerText = "【新問生成完了】 「出題する」ボタンを押してください。";
+            document.getElementById('answer-guide').innerText = `[正解: ${currentQ.answer}]`;
+            document.getElementById('broadcast-btn').disabled = false;
+            log(`新問生成（履歴数: ${usedQuestions.length}）`);
+        }
+    }
+
+    function genYojijukugoQuestion() {
+        if(externalYojiData.length === 0) return null;
+        const item = externalYojiData[Math.floor(Math.random() * externalYojiData.length)];
+        return { meta: `【四字熟語 (全${externalYojiData.length}問)】`, text: `「${item.meaning}」という意味を持つ有名な四字熟語は何でしょう？`, answer: item.word };
+    }
+    function genPatternPuzzle1() {
+        const start = Math.floor(Math.random() * 3) + 1;
+        const ans = (start + 3) * (start + 3) + 1;
+        return { meta: "【論理パズル・法則推理】", text: `ある法則によって数が変換されています。<br>${start} ➔ ${(start)*(start)+1}<br>${start+1} ➔ ${(start+1)*(start+1)+1}<br>${start+2} ➔ ${(start+2)*(start+2)+1}<br>では、${start+3} はいくつに変換されるでしょう？`, answer: String(ans) };
+    }
+    function genPatternPuzzle2() {
+        const base = Math.floor(Math.random() * 3) + 2;
+        const x1 = 2, x2 = 3, x3 = 4, x4 = 5;
+        const ans = x4 * x4 * base + 1;
+        return { meta: "【論理パズル・数列推理】", text: `次の数列の規則性を見つけて、「？」に入る数字を答えなさい。<br>${x1*x1*base+1}, ${x2*x2*base+1}, ${x3*x3*base+1}, ？`, answer: String(ans) };
+    }
+    function genWorkProblem() {
+        return { meta: "【算数パズル・仕事算】", text: `ある仕事を、A君がやると12日かかり、B君がやると6日かかります。2人共同でこの仕事をすると、何日かかるでしょう？`, answer: "4" };
+    }
+    function genCraneTurtle() {
+        return { meta: "【伝統パズル・鶴亀算】", text: `ツルとカメが合わせて 12 匹います。足の数の合計を数えたら 38 本でした。カメは何匹いるでしょう？`, answer: "5" };
+    }
+    function genAgeProblem() {
+        return { meta: "【伝統パズル・年齢算】", text: `現在、父親は 36 歳で、子供は 8 歳です。父親の年齢が子供の年齢の 3 倍になるのは、今から何年後でしょう？`, answer: "6" };
+    }
+    function genPrefectureQuestion() {
+        const data = [{ pref: "北海道", capital: "札幌市" }, { pref: "東京都", capital: "東京都" }, { pref: "神奈川県", capital: "横浜市" }, { pref: "大阪府", capital: "大阪市" }, { pref: "福岡県", capital: "福岡市" }];
+        const item = data[Math.floor(Math.random() * data.length)];
+        return { meta: "【地理・日本の都道府県】", text: `${item.pref}の県庁所在地はどこでしょう？`, answer: item.capital };
+    }
+    function genCapitalQuestion() {
+        const data = [{ country: "フランス", capital: "パリ" }, { country: "イタリア", capital: "ローマ" }, { country: "イギリス", capital: "ロンドン" }, { country: "アメリカ", capital: "ワシントンD.C." }];
+        const item = data[Math.floor(Math.random() * data.length)];
+        return { meta: "【世界地理・首都】", text: `${item.country}の首都はどこでしょう？`, answer: item.capital };
+    }
+
+    // ── 通信・ゲーム進行制御 ──
+    function handleHostReceiveData(c, data) {
+        if(data.type === 'JOIN') {
+            if(connections[c.peer]) {
+                connections[c.peer].name = data.name;
+            } else {
+                connections[c.peer] = { conn: c, name: data.name, score: 0 };
+            }
+            log(`[参加] ${data.name} さんが入室しました！`);
+            broadcastScores();
+        } else if(data.type === 'BUZZER') {
+            if(!buzzerActive) return;
+            buzzerActive = false;
+            currentResponderId = c.peer;
+            currentResponderName = data.name;
+
+            log(`★ ${data.name} さんが早押し成功！ (15秒タイマー開始)`);
+            document.getElementById('status-alert').innerText = `🚨 ${data.name} さんが回答権獲得！`;
+            
+            startAnswerTimer(data.name, c.peer);
+            broadcast({ type: 'START_TIMER', name: data.name });
+
+            showHostJudgeUI(data.name, c.peer, "");
+        } else if(data.type === 'ANSWER_TEXT') {
+            log(`💬 ${data.name}さんの回答: ${data.text}`);
+            clearAnswerTimer();
+            broadcast({ type: 'STOP_TIMER' });
+            showHostJudgeUI(currentResponderName, currentResponderId, data.text);
+        }
+    }
+
+    function broadcast(data) {
+        for(let peerId in connections) {
+            if(connections[peerId] && connections[peerId].conn) {
+                connections[peerId].conn.send(data);
+            }
+        }
+    }
+
+    function broadcastScores() {
+        let scores = { [myName]: myScore };
+        for(let id in connections) {
+            if(connections[id]) {
+                scores[connections[id].name] = connections[id].score;
+            }
+        }
+        updateScoreBoardUI(scores);
+        broadcast({ type: 'UPDATE_SCORES', scores: scores });
+    }
+
+    function hostNextQuestion() {
+        if(!currentQ.text) { alert("先に問題を作成してください"); return; }
+        clearAnswerTimer();
+        document.getElementById('q-text').innerHTML = currentQ.text;
+        document.getElementById('status-alert').innerText = "【 早押し受付中！】";
+        buzzerActive = true;
+        currentResponderId = null;
+
+        broadcast({ type: 'NEXT_Q', meta: currentQ.meta, text: currentQ.text });
+    }
+
+    function hostResetBuzzer() {
+        clearAnswerTimer();
+        buzzerActive = true;
+        document.getElementById('status-alert').innerText = "【 早押し再開！（他の方もどうぞ）】";
+        removeHostJudgeUI();
+        broadcast({ type: 'RESET_BUZZER' });
+    }
+
+    // ── 15秒回答タイマーの制御ロジック ──
+    function startAnswerTimer(responderName, responderId) {
+        clearAnswerTimer();
+        
+        const timerUi = document.getElementById('timer-ui');
+        const timerBar = document.getElementById('timer-bar');
+        const timerSec = document.getElementById('timer-sec');
+        
+        if (!timerUi || !timerBar || !timerSec) return;
+
+        timerUi.classList.remove('hidden');
+        timerBar.style.width = "100%";
+        timerBar.style.backgroundColor = "#22c55e";
+
+        let startTime = Date.now();
+
+        timerInterval = setInterval(() => {
+            let elapsed = Date.now() - startTime;
+            let remaining = ANSWER_TIME_LIMIT - elapsed;
+            let percent = (remaining / ANSWER_TIME_LIMIT) * 100;
+
+            if (percent <= 0) percent = 0;
+
+            timerBar.style.width = percent + "%";
+            timerSec.innerText = (remaining / 1000).toFixed(1) + "秒";
+
+            if (percent < 30) {
+                timerBar.style.backgroundColor = "#ef4444";
+            }
+        }, 50);
+
+        answerTimer = setTimeout(() => {
+            clearAnswerTimer();
+            log(`⏰ ${responderName} さんが15秒以内に回答しなかったため失格です！`);
+            document.getElementById('status-alert').innerText = `⏰ ${responderName} さん時間切れ！失格 (-10pt)`;
+            
+            // 時間切れ時に解答欄を隠す
+            document.getElementById('answer-input-area').classList.add('hidden');
+
+            if(isHost) {
+                if(responderId === 'host') {
+                    myScore -= 10;
+                } else if(connections[responderId]) {
+                    connections[responderId].score -= 10;
+                }
+                broadcastScores();
+                removeHostJudgeUI();
+                document.getElementById('answer-guide').innerHTML = `<b style="color:#ef4444;">${responderName}さんが時間切れ失格しました。「早押しリセット」を押すと次の人が押せます。</b>`;
+            }
+            
+            broadcast({ type: 'TIMEOUT_DISQUALIFIED', name: responderName });
+        }, ANSWER_TIME_LIMIT);
+    }
+
+    function clearAnswerTimer() {
+        if(answerTimer) clearTimeout(answerTimer);
+        if(timerInterval) clearInterval(timerInterval);
+        answerTimer = null;
+        timerInterval = null;
+        const timerUi = document.getElementById('timer-ui');
+        if(timerUi) {
+            timerUi.classList.add('hidden');
+        }
+    }
+
+    function showHostJudgeUI(name, peerId, userAns) {
+        let guide = document.getElementById('answer-guide');
+        let ansDisplay = userAns ? `<br>💬 回答者(${name})の入力: <b style="color:white;">${userAns}</b>` : "";
+        guide.innerHTML = `<b style="color:#fbbf24;">${name}さんの回答判定：</b>
+            <button class="btn" style="background:#22c55e; padding:5px 10px; margin-left:5px;" onclick="judgeResult(true, '${peerId}')">正解(+10)</button>
+            <button class="btn" style="background:#ef4444; padding:5px 10px; margin-left:5px;" onclick="judgeResult(false, '${peerId}')">不正解(-10)</button>
+            ${ansDisplay}
+            <br>正解: ${currentQ.answer}`;
+    }
+
+    function removeHostJudgeUI() {
+        document.getElementById('answer-guide').innerText = `[正解: ${currentQ.answer}]`;
+    }
+
+    function judgeResult(isCorrect, peerId) {
+        clearAnswerTimer();
+        broadcast({ type: 'STOP_TIMER' });
+        let targetName = "";
+        if(isCorrect) {
+            if(peerId === 'host') {
+                myScore += 10;
+                targetName = myName;
+            } else if(connections[peerId]) {
+                connections[peerId].score += 10;
+                targetName = connections[peerId].name;
+            }
+            alert(`👤 「${targetName}さん正解！ +10pt」に設定しました。`);
+            broadcast({ type: 'NOTIFY_RESULT', text: `🎉 ${targetName} さん 正解！ (+10pt)` });
+            document.getElementById('status-alert').innerText = `🎉 ${targetName} さん 正解！ (+10pt)`;
+        } else {
+            if(peerId === 'host') {
+                myScore -= 10;
+                targetName = myName;
+            } else if(connections[peerId]) {
+                connections[peerId].score -= 10;
+                targetName = connections[peerId].name;
+            }
+            alert(`👤 「${targetName}さん不正解... -10pt」に設定しました。`);
+            broadcast({ type: 'NOTIFY_RESULT', text: `❌ ${targetName} さん 不正解... (-10pt)` });
+            document.getElementById('status-alert').innerText = `❌ ${targetName} さん 不正解... (-10pt)`;
+        }
+        broadcastScores();
+        removeHostJudgeUI();
+    }
+
+    function handlePlayerReceiveData(data) {
+        if(data.type === 'NEXT_Q') {
+            clearAnswerTimer();
+            document.getElementById('q-meta').innerText = data.meta;
+            document.getElementById('q-text').innerHTML = data.text;
+            document.getElementById('status-alert').innerText = "【 早押し受付中！！！ 】";
+            
+            const bBtn = document.getElementById('buzzer-btn');
+            bBtn.disabled = false;
+            bBtn.innerText = "押す！";
+            bBtn.style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
+            
+            document.getElementById('answer-input-area').classList.add('hidden');
+        } else if(data.type === 'BUZZER_SUCCESS') {
+            document.getElementById('status-alert').innerText = `🚨 ${data.name} さんが回答権獲得！`;
+            
+            const bBtn = document.getElementById('buzzer-btn');
+            bBtn.disabled = true;
+            bBtn.innerText = "押した！";
+            bBtn.style.background = "#475569";
+            
+            // 自分が早押しに成功した場合、解答欄を確実に表示する
+            if(data.name.trim() === myName.trim()) {
+                document.getElementById('answer-input-area').classList.remove('hidden');
+            }
+        } else if(data.type === 'START_TIMER') {
+            startAnswerTimer(data.name, "remote");
+        } else if(data.type === 'STOP_TIMER') {
+            clearAnswerTimer();
+        } else if(data.type === 'TIMEOUT_DISQUALIFIED') {
+            clearAnswerTimer();
+            document.getElementById('status-alert').innerText = `⏰ ${data.name} さん時間切れ失格！`;
+            document.getElementById('answer-input-area').classList.add('hidden');
+        } else if(data.type === 'RESET_BUZZER') {
+            clearAnswerTimer();
+            document.getElementById('status-alert').innerText = "【 早押し再開！ 】";
+            
+            const bBtn = document.getElementById('buzzer-btn');
+            bBtn.disabled = false;
+            bBtn.innerText = "押す！";
+            bBtn.style.background = "linear-gradient(135deg, #ef4444, #b91c1c)";
+            
+            document.getElementById('answer-input-area').classList.add('hidden');
+        } else if(data.type === 'UPDATE_SCORES') {
+            updateScoreBoardUI(data.scores);
+        } else if(data.type === 'NOTIFY_RESULT') {
+            clearAnswerTimer();
+            document.getElementById('status-alert').innerText = data.text;
+            document.getElementById('answer-input-area').classList.add('hidden');
+        }
+    }
+
+    function pressBuzzer() {
+        const bBtn = document.getElementById('buzzer-btn');
+        bBtn.disabled = true;
+        bBtn.innerText = "押した！";
+        bBtn.style.background = "#475569";
+        document.getElementById('status-alert').innerText = "ボタンを押しました！";
+        
+        // 自分が押したときは即座に解答欄を表示する
+        document.getElementById('answer-input-area').classList.remove('hidden');
+        startAnswerTimer(myName, "local");
+
+        conn.send({ type: 'BUZZER', name: myName });
+    }
+
+    function sendAnswerText() {
+        const txt = document.getElementById('player-answer-text').value.trim();
+        if(!txt) { alert("回答を入力してください"); return; }
+        conn.send({ type: 'ANSWER_TEXT', name: myName, text: txt });
+        clearAnswerTimer();
+        document.getElementById('status-alert').innerText = `回答送信完了: 「${txt}」 (判定待ち)`;
+        document.getElementById('answer-input-area').classList.add('hidden');
+        document.getElementById('player-answer-text').value = "";
+    }
+
+    function updateScoreBoardUI(scores) {
+        let html = "";
+        const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        for(let [name, score] of sortedScores) {
+            html += `<div>👤 <b>${name}</b>: <span style="color:#38bdf8; font-size:1.1rem; font-weight:bold;">${score}</span> pt</div>`;
+        }
+        document.getElementById('score-list').innerHTML = html;
+    }
+
+    function updateScoreBoard() {
+        let scores = { [myName]: myScore };
+        for(let id in connections) {
+            if(connections[id]) {
+                scores[connections[id].name] = connections[id].score;
+            }
+        }
+        updateScoreBoardUI(scores);
+    }
+</script>
+
+</body>
+</html>
