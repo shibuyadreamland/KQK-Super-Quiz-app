@@ -170,7 +170,7 @@
 <script>
     let peer = null;
     let conn = null;
-    let connections = {}; // hostId -> { conn, name, score }
+    let connections = {};
     let isHost = false;
     let myName = "";
     let myScore = 0;
@@ -178,7 +178,6 @@
     let currentResponderId = null;
     let currentResponderName = "";
 
-    // AI自動生成用のクイズストック（クイズ王大会レベルのバリエーション）
     const aiQuestionPool = [
         { meta: "AI自動生成 【歴史・科学】", text: "1911年にノルウェーの探検家アムンゼンが人類史上初めて到達した、地球の最南端にある地点は何でしょう？", answer: "南極点" },
         { meta: "AI自動生成 【文学・芸術】", text: "19世紀のフランスの画家モネの代表作で、自身の庭の池に架かる橋やスイレンを描いた連作の名称は何でしょう？", answer: "睡蓮" },
@@ -244,7 +243,6 @@
         });
     }
 
-    // --- ホスト側の処理 ---
     function handleHostReceiveData(c, data) {
         if(data.type === 'JOIN') {
             connections[c.peer] = { conn: c, name: data.name, score: 0 };
@@ -259,7 +257,6 @@
             log(`★ ${data.name} さんが早押し成功！`);
             document.getElementById('status-alert').innerText = `${data.name} さんが回答権獲得！`;
             
-            // 出題者画面に正誤判定ボタンを表示
             showHostJudgeUI(data.name, c.peer);
             broadcast({ type: 'BUZZER_SUCCESS', name: data.name });
         }
@@ -272,7 +269,7 @@
     }
 
     function broadcastScores() {
-        let scores = { [myName]: 0 }; // 主催者分
+        let scores = { [myName]: myScore };
         for(let id in connections) {
             scores[connections[id].name] = connections[id].score;
         }
@@ -281,7 +278,6 @@
     }
 
     function generateAIQuestion() {
-        // AIがランダムに難問を選んで生成するシミュレーション
         const randomIndex = Math.floor(Math.random() * aiQuestionPool.length);
         currentQ = aiQuestionPool[randomIndex];
         document.getElementById('q-meta').innerText = currentQ.meta;
@@ -339,10 +335,9 @@
         }
         broadcastScores();
         removeHostJudgeUI();
-        document.getElementById('status-alert').innerText = "判定終了。「早押しリセット」または「次の問題」へ";
+        document.getElementById('status-alert').innerText = "判定終了。「早押しリセット」またはガチャ等へ";
     }
 
-    // --- 参加者側の処理 ---
     function handlePlayerReceiveData(data) {
         if(data.type === 'NEXT_Q') {
             document.getElementById('q-meta').innerText = data.meta;
@@ -371,7 +366,6 @@
 
     function updateScoreBoardUI(scores) {
         let html = "";
-        // 得点が高い順にソートして表示
         const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
         for(let [name, score] of sortedScores) {
             html += `<div>👤 <b>${name}</b>: <span style="color:#38bdf8; font-size:1.1rem; font-weight:bold;">${score}</span> pt</div>`;
